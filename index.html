@@ -1,0 +1,543 @@
+<!--
+ * @name         Startup Sentry
+ * @license      BSL 1.1 — See LICENSE.md
+ * @description  Renderer — single-page UI for managing Windows startup programs
+ * @author       Cloud Nimbus LLC
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Startup Sentry</title>
+<style>
+/* ── Reset & base ─────────────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f1a14;--bg2:#132a1e;--bg3:#193525;
+  --fg:#e0efe6;--fg2:#8fb8a0;--fg3:#5a8a70;
+  --emerald:#059669;--emerald-light:#34d399;--emerald-dark:#047857;
+  --red:#dc2626;--red-bg:#2a1010;
+  --yellow:#eab308;--yellow-bg:#2a2510;
+  --border:#1e3a2a;--radius:8px;
+}
+html,body{height:100%;overflow:hidden}
+body{
+  font-family:'Segoe UI',system-ui,sans-serif;font-size:14px;
+  background:var(--bg);color:var(--fg);display:flex;flex-direction:column;
+  -webkit-app-region:no-drag;user-select:none;
+}
+::-webkit-scrollbar{width:8px}
+::-webkit-scrollbar-track{background:var(--bg2)}
+::-webkit-scrollbar-thumb{background:var(--fg3);border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:var(--emerald)}
+
+/* ── Admin banner ─────────────────────────────────────────── */
+.admin-banner{
+  display:none;background:var(--yellow-bg);border-bottom:1px solid #5a4a00;
+  padding:8px 16px;font-size:13px;color:var(--yellow);
+  align-items:center;gap:10px;
+}
+.admin-banner.visible{display:flex}
+.admin-banner button{
+  margin-left:auto;background:var(--yellow);color:#000;border:none;
+  padding:4px 14px;border-radius:var(--radius);font-size:12px;font-weight:600;cursor:pointer;
+}
+.admin-banner button:hover{filter:brightness(1.1)}
+
+/* ── Header ───────────────────────────────────────────────── */
+.header{
+  display:flex;align-items:center;gap:14px;padding:16px 20px 12px;
+  border-bottom:1px solid var(--border);background:var(--bg);
+}
+.logo{
+  width:38px;height:38px;border-radius:10px;background:var(--emerald);
+  display:flex;align-items:center;justify-content:center;
+  font-weight:800;font-size:16px;color:#fff;letter-spacing:-0.5px;
+  flex-shrink:0;
+}
+.header h1{font-size:18px;font-weight:700;color:var(--fg)}
+.header h1 span{font-weight:400;color:var(--fg2);font-size:13px;margin-left:6px}
+
+/* ── Toolbar ──────────────────────────────────────────────── */
+.toolbar{
+  display:flex;align-items:center;gap:10px;padding:12px 20px;
+  border-bottom:1px solid var(--border);background:var(--bg);flex-wrap:wrap;
+}
+.search-box{
+  flex:1;min-width:200px;background:var(--bg2);border:1px solid var(--border);
+  border-radius:var(--radius);padding:8px 12px;color:var(--fg);font-size:13px;
+  outline:none;font-family:inherit;
+}
+.search-box:focus{border-color:var(--emerald)}
+.search-box::placeholder{color:var(--fg3)}
+.btn{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:8px 16px;border-radius:var(--radius);border:none;
+  font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;
+  transition:filter 0.15s;
+}
+.btn:hover{filter:brightness(1.15)}
+.btn-primary{background:var(--emerald);color:#fff}
+.btn-secondary{background:var(--bg3);color:var(--fg)}
+.btn-danger{background:var(--red);color:#fff}
+.btn-ghost{background:transparent;color:var(--fg2);border:1px solid var(--border)}
+.btn-sm{padding:5px 10px;font-size:12px}
+
+/* ── Tab bar ──────────────────────────────────────────────── */
+.tabs{
+  display:flex;gap:0;padding:0 20px;background:var(--bg);border-bottom:1px solid var(--border);
+}
+.tab{
+  padding:10px 20px;font-size:13px;font-weight:600;color:var(--fg3);
+  cursor:pointer;border-bottom:2px solid transparent;transition:all 0.15s;
+}
+.tab:hover{color:var(--fg2)}
+.tab.active{color:var(--emerald-light);border-bottom-color:var(--emerald)}
+.tab .badge{
+  display:inline-block;background:var(--bg3);color:var(--fg2);
+  padding:1px 7px;border-radius:10px;font-size:11px;margin-left:6px;
+}
+.tab.active .badge{background:var(--emerald-dark);color:#fff}
+
+/* ── Table ────────────────────────────────────────────────── */
+.table-wrap{flex:1;overflow-y:auto;padding:0}
+table{width:100%;border-collapse:collapse}
+thead{position:sticky;top:0;z-index:2;background:var(--bg2)}
+th{
+  text-align:left;padding:10px 16px;font-size:12px;font-weight:600;
+  color:var(--fg3);text-transform:uppercase;letter-spacing:0.5px;
+  border-bottom:1px solid var(--border);
+}
+td{
+  padding:10px 16px;border-bottom:1px solid var(--border);
+  font-size:13px;vertical-align:middle;
+}
+tr:hover td{background:var(--bg2)}
+.item-name{font-weight:600;color:var(--fg)}
+.item-cmd{
+  color:var(--fg2);font-family:'Cascadia Code','Consolas',monospace;font-size:12px;
+  max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.item-cmd:hover{white-space:normal;word-break:break-all}
+.source-badge{
+  display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;
+}
+.source-hkcu{background:#0e3a2a;color:var(--emerald-light)}
+.source-hklm{background:#2a1e30;color:#c084fc}
+.source-folder{background:#1e2a3a;color:#60a5fa}
+.source-task{background:#2a2510;color:#fbbf24}
+.status-enabled{color:var(--emerald-light)}
+.status-disabled{color:var(--red)}
+.impact{font-size:11px;color:var(--fg3)}
+.actions{display:flex;gap:4px;flex-wrap:nowrap}
+
+/* ── Modal ────────────────────────────────────────────────── */
+.modal-overlay{
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);
+  z-index:100;align-items:center;justify-content:center;
+}
+.modal-overlay.visible{display:flex}
+.modal{
+  background:var(--bg2);border:1px solid var(--border);border-radius:12px;
+  padding:24px;width:440px;max-width:90%;
+}
+.modal h2{font-size:16px;margin-bottom:16px;color:var(--fg)}
+.modal label{display:block;font-size:13px;color:var(--fg2);margin-bottom:4px}
+.modal input[type="text"]{
+  width:100%;background:var(--bg);border:1px solid var(--border);
+  border-radius:var(--radius);padding:8px 12px;color:var(--fg);font-size:13px;
+  outline:none;font-family:inherit;margin-bottom:12px;
+}
+.modal input[type="text"]:focus{border-color:var(--emerald)}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+
+/* ── Settings panel ───────────────────────────────────────── */
+.settings-panel{
+  display:none;position:fixed;top:0;right:0;bottom:0;width:340px;
+  background:var(--bg2);border-left:1px solid var(--border);z-index:90;
+  padding:24px;overflow-y:auto;
+}
+.settings-panel.visible{display:block}
+.settings-panel h2{font-size:16px;margin-bottom:20px;color:var(--fg)}
+.setting-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 0;border-bottom:1px solid var(--border);
+}
+.setting-row label{font-size:13px;color:var(--fg2);flex:1}
+.toggle{
+  position:relative;width:40px;height:22px;
+  background:var(--bg3);border-radius:11px;cursor:pointer;
+  transition:background 0.2s;flex-shrink:0;
+}
+.toggle.on{background:var(--emerald)}
+.toggle::after{
+  content:'';position:absolute;top:3px;left:3px;width:16px;height:16px;
+  background:#fff;border-radius:50%;transition:transform 0.2s;
+}
+.toggle.on::after{transform:translateX(18px)}
+
+/* ── Empty state ──────────────────────────────────────────── */
+.empty-state{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:60px 20px;color:var(--fg3);
+}
+.empty-state .icon{font-size:40px;margin-bottom:12px;opacity:0.4}
+.empty-state p{font-size:14px}
+
+/* ── Loading ──────────────────────────────────────────────── */
+.loading{
+  display:flex;align-items:center;justify-content:center;padding:60px;
+  color:var(--fg3);gap:10px;
+}
+.spinner{
+  width:20px;height:20px;border:2px solid var(--border);
+  border-top-color:var(--emerald);border-radius:50%;
+  animation:spin 0.7s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<!-- Admin banner -->
+<div class="admin-banner" id="adminBanner">
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1L1 14h14L8 1z" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M8 6v3M8 11v1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+  <span>Running without Administrator privileges. Some features (HKLM entries, scheduled tasks) are limited.</span>
+  <button id="btnElevate">Run as Admin</button>
+</div>
+
+<!-- Header -->
+<div class="header">
+  <div class="logo">SS</div>
+  <h1>Startup Sentry <span>v1.0.0</span></h1>
+  <div style="flex:1"></div>
+  <button class="btn btn-ghost btn-sm" id="btnSettings" title="Settings">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6.5 1.5h3l.4 1.8.7.3L12.3 2.5l2.1 2.1-1.1 1.7.3.7 1.8.4v3l-1.8.4-.3.7 1.1 1.7-2.1 2.1-1.7-1.1-.7.3-.4 1.8h-3l-.4-1.8-.7-.3-1.7 1.1-2.1-2.1 1.1-1.7-.3-.7L.6 9.5v-3l1.8-.4.3-.7L1.6 3.7l2.1-2.1 1.7 1.1.7-.3z" stroke="currentColor" stroke-width="1.2"/><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.2"/></svg>
+    Settings
+  </button>
+</div>
+
+<!-- Toolbar -->
+<div class="toolbar">
+  <input type="text" class="search-box" id="searchBox" placeholder="Search startup programs...">
+  <button class="btn btn-primary" id="btnAdd">
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    Add Entry
+  </button>
+  <button class="btn btn-secondary" id="btnRefresh">
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1 7a6 6 0 0111 -3M13 7a6 6 0 01-11 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M12 1v3h-3M2 13v-3h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    Refresh
+  </button>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+  <div class="tab active" data-tab="enabled">Enabled <span class="badge" id="enabledCount">0</span></div>
+  <div class="tab" data-tab="disabled">Disabled <span class="badge" id="disabledCount">0</span></div>
+  <div class="tab" data-tab="all">All <span class="badge" id="allCount">0</span></div>
+</div>
+
+<!-- Table -->
+<div class="table-wrap" id="tableWrap">
+  <div class="loading" id="loadingIndicator"><div class="spinner"></div> Scanning startup programs...</div>
+  <table id="itemsTable" style="display:none">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Command / Path</th>
+        <th>Source</th>
+        <th>Status</th>
+        <th>Impact</th>
+        <th style="width:140px">Actions</th>
+      </tr>
+    </thead>
+    <tbody id="itemsBody"></tbody>
+  </table>
+  <div class="empty-state" id="emptyState" style="display:none">
+    <div class="icon">&#128270;</div>
+    <p>No startup programs found in this view.</p>
+  </div>
+</div>
+
+<!-- Add modal -->
+<div class="modal-overlay" id="addModal">
+  <div class="modal">
+    <h2>Add Startup Entry</h2>
+    <label for="addName">Program name</label>
+    <input type="text" id="addName" placeholder="My Application">
+    <label for="addCommand">Command / Path</label>
+    <input type="text" id="addCommand" placeholder='C:\Program Files\App\app.exe'>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="btnAddCancel">Cancel</button>
+      <button class="btn btn-primary" id="btnAddConfirm">Add</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm modal -->
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal">
+    <h2 id="confirmTitle">Remove entry?</h2>
+    <p id="confirmMsg" style="color:var(--fg2);font-size:13px;margin-bottom:8px"></p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="btnConfirmCancel">Cancel</button>
+      <button class="btn btn-danger" id="btnConfirmOk">Remove</button>
+    </div>
+  </div>
+</div>
+
+<!-- Settings panel -->
+<div class="settings-panel" id="settingsPanel">
+  <h2>Settings</h2>
+  <div class="setting-row">
+    <label>Start minimized to tray</label>
+    <div class="toggle" id="togMinimized" tabindex="0"></div>
+  </div>
+  <div class="setting-row">
+    <label>Show HKLM entries (requires Admin)</label>
+    <div class="toggle" id="togHKLM" tabindex="0"></div>
+  </div>
+  <div style="margin-top:24px">
+    <button class="btn btn-ghost btn-sm" id="btnCloseSettings">Close</button>
+  </div>
+</div>
+
+<script>
+/* ── State ────────────────────────────────────────────────── */
+let allItems = [];
+let currentTab = 'enabled';
+let searchTerm = '';
+
+/* ── DOM refs ─────────────────────────────────────────────── */
+const $  = (s) => document.querySelector(s);
+const $$ = (s) => document.querySelectorAll(s);
+
+const adminBanner   = $('#adminBanner');
+const searchBox     = $('#searchBox');
+const itemsBody     = $('#itemsBody');
+const itemsTable    = $('#itemsTable');
+const loadingInd    = $('#loadingIndicator');
+const emptyState    = $('#emptyState');
+const addModal      = $('#addModal');
+const confirmModal  = $('#confirmModal');
+const settingsPanel = $('#settingsPanel');
+
+/* ── Init ─────────────────────────────────────────────────── */
+(async function init() {
+  const isAdmin = await window.sentry.checkAdmin();
+  if (!isAdmin) adminBanner.classList.add('visible');
+
+  const settings = await window.sentry.getSettings();
+  if (settings.startMinimized) $('#togMinimized').classList.add('on');
+  if (settings.showHKLM) $('#togHKLM').classList.add('on');
+
+  await loadItems();
+})();
+
+async function loadItems() {
+  loadingInd.style.display = 'flex';
+  itemsTable.style.display = 'none';
+  emptyState.style.display = 'none';
+
+  try {
+    allItems = await window.sentry.getStartupItems();
+  } catch { allItems = []; }
+
+  loadingInd.style.display = 'none';
+  renderItems();
+}
+
+/* ── Render ────────────────────────────────────────────────── */
+function renderItems() {
+  let filtered = allItems;
+
+  // Tab filter
+  if (currentTab === 'enabled') filtered = filtered.filter(i => i.enabled);
+  else if (currentTab === 'disabled') filtered = filtered.filter(i => !i.enabled);
+
+  // Search
+  if (searchTerm) {
+    const q = searchTerm.toLowerCase();
+    filtered = filtered.filter(i =>
+      i.name.toLowerCase().includes(q) ||
+      (i.command || '').toLowerCase().includes(q) ||
+      (i.source || '').toLowerCase().includes(q) ||
+      (i.publisher || '').toLowerCase().includes(q)
+    );
+  }
+
+  // Update counts
+  $('#enabledCount').textContent = allItems.filter(i => i.enabled).length;
+  $('#disabledCount').textContent = allItems.filter(i => !i.enabled).length;
+  $('#allCount').textContent = allItems.length;
+
+  if (filtered.length === 0) {
+    itemsTable.style.display = 'none';
+    emptyState.style.display = 'flex';
+    return;
+  }
+
+  itemsTable.style.display = 'table';
+  emptyState.style.display = 'none';
+
+  itemsBody.innerHTML = filtered.map(item => {
+    const sourceClass = item.type === 'hkcu' ? 'source-hkcu' :
+                        item.type === 'hklm' ? 'source-hklm' :
+                        item.type === 'folder' ? 'source-folder' : 'source-task';
+    const statusClass = item.enabled ? 'status-enabled' : 'status-disabled';
+    const statusText  = item.enabled ? 'Enabled' : 'Disabled';
+    const size = item.fileSize ? formatSize(item.fileSize) : '--';
+    const pub  = item.publisher || '--';
+
+    return `<tr>
+      <td class="item-name">${esc(item.name)}</td>
+      <td class="item-cmd" title="${esc(item.command || '')}">${esc(item.command || '--')}</td>
+      <td><span class="source-badge ${sourceClass}">${esc(item.source)}</span></td>
+      <td class="${statusClass}">${statusText}</td>
+      <td class="impact">${esc(size)}<br>${esc(pub)}</td>
+      <td class="actions">
+        ${item.enabled
+          ? `<button class="btn btn-ghost btn-sm" onclick="toggleItem('${esc(item.id)}', false)" title="Disable">Disable</button>`
+          : `<button class="btn btn-ghost btn-sm" onclick="toggleItem('${esc(item.id)}', true)" title="Enable">Enable</button>`
+        }
+        <button class="btn btn-ghost btn-sm" onclick="openLoc('${escAttr(item.command)}')" title="Open location">&#128194;</button>
+        <button class="btn btn-ghost btn-sm" onclick="removeEntry('${esc(item.id)}')" title="Remove" style="color:var(--red)">&#10005;</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function esc(s) {
+  if (!s) return '';
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function escAttr(s) {
+  return (s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+/* ── Actions ──────────────────────────────────────────────── */
+async function toggleItem(id, enable) {
+  const item = allItems.find(i => i.id === id);
+  if (!item) return;
+  try {
+    if (enable) await window.sentry.enableItem(item);
+    else        await window.sentry.disableItem(item);
+  } catch(e) { console.error(e); }
+  await loadItems();
+}
+
+function openLoc(cmd) {
+  window.sentry.openLocation(cmd);
+}
+
+let pendingRemoveId = null;
+function removeEntry(id) {
+  const item = allItems.find(i => i.id === id);
+  if (!item) return;
+  pendingRemoveId = id;
+  $('#confirmMsg').textContent = `Are you sure you want to remove "${item.name}" from startup?`;
+  confirmModal.classList.add('visible');
+}
+
+/* ── Event listeners ──────────────────────────────────────── */
+
+// Tabs
+$$('.tab').forEach(tab => tab.addEventListener('click', () => {
+  $$('.tab').forEach(t => t.classList.remove('active'));
+  tab.classList.add('active');
+  currentTab = tab.dataset.tab;
+  renderItems();
+}));
+
+// Search
+searchBox.addEventListener('input', () => {
+  searchTerm = searchBox.value;
+  renderItems();
+});
+
+// Refresh
+$('#btnRefresh').addEventListener('click', () => loadItems());
+
+// Add modal
+$('#btnAdd').addEventListener('click', () => {
+  $('#addName').value = '';
+  $('#addCommand').value = '';
+  addModal.classList.add('visible');
+  setTimeout(() => $('#addName').focus(), 100);
+});
+$('#btnAddCancel').addEventListener('click', () => addModal.classList.remove('visible'));
+$('#btnAddConfirm').addEventListener('click', async () => {
+  const name = $('#addName').value.trim();
+  const cmd  = $('#addCommand').value.trim();
+  if (!name || !cmd) return;
+  try {
+    await window.sentry.addItem(name, cmd);
+  } catch(e) { console.error(e); }
+  addModal.classList.remove('visible');
+  await loadItems();
+});
+
+// Confirm modal
+$('#btnConfirmCancel').addEventListener('click', () => {
+  confirmModal.classList.remove('visible');
+  pendingRemoveId = null;
+});
+$('#btnConfirmOk').addEventListener('click', async () => {
+  if (pendingRemoveId) {
+    const item = allItems.find(i => i.id === pendingRemoveId);
+    if (item) {
+      try { await window.sentry.removeItem(item); } catch(e) { console.error(e); }
+    }
+    pendingRemoveId = null;
+  }
+  confirmModal.classList.remove('visible');
+  await loadItems();
+});
+
+// Settings
+$('#btnSettings').addEventListener('click', () => settingsPanel.classList.toggle('visible'));
+$('#btnCloseSettings').addEventListener('click', () => settingsPanel.classList.remove('visible'));
+
+$('#togMinimized').addEventListener('click', async function() {
+  this.classList.toggle('on');
+  await window.sentry.saveSettings({ startMinimized: this.classList.contains('on') });
+});
+$('#togHKLM').addEventListener('click', async function() {
+  this.classList.toggle('on');
+  await window.sentry.saveSettings({ showHKLM: this.classList.contains('on') });
+  await loadItems();
+});
+
+// Elevate
+$('#btnElevate').addEventListener('click', () => window.sentry.selfElevate());
+
+// Close modals on overlay click
+addModal.addEventListener('click', (e) => { if (e.target === addModal) addModal.classList.remove('visible'); });
+confirmModal.addEventListener('click', (e) => { if (e.target === confirmModal) confirmModal.classList.remove('visible'); });
+
+// Keyboard
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    addModal.classList.remove('visible');
+    confirmModal.classList.remove('visible');
+    settingsPanel.classList.remove('visible');
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+    e.preventDefault();
+    searchBox.focus();
+  }
+});
+</script>
+</body>
+</html>
