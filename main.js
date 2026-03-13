@@ -9,6 +9,7 @@ const { app, BrowserWindow, Tray, Menu, ipcMain, shell, nativeImage, dialog } = 
 const path = require('path');
 const os = require('os');
 const { execSync, exec } = require('child_process');
+const guard = require('./process-guard');
 const fs = require('fs');
 const Store = require('electron-store');
 
@@ -129,16 +130,8 @@ function createTray() {
 /* ── PowerShell helpers (Windows) ────────────────────────────── */
 
 function ps(script) {
-  return new Promise((resolve, reject) => {
-    exec(
-      `powershell -NoProfile -NonInteractive -Command "${script.replace(/"/g, '\\"')}"`,
-      { maxBuffer: 10 * 1024 * 1024 },
-      (err, stdout, stderr) => {
-        if (err) return reject(new Error(stderr || err.message));
-        resolve(stdout.trim());
-      }
-    );
-  });
+  const cmd = `powershell -NoProfile -NonInteractive -Command "${script.replace(/"/g, '\\"')}"`;
+  return guard.execPromise(cmd).then(s => (s || '').trim());
 }
 
 function psSync(script) {
@@ -155,16 +148,7 @@ function psSync(script) {
 /* ── Shell helper (macOS/Linux) ──────────────────────────────── */
 
 function runShell(command) {
-  return new Promise((resolve, reject) => {
-    exec(
-      command,
-      { shell: '/bin/bash', maxBuffer: 10 * 1024 * 1024 },
-      (err, stdout, stderr) => {
-        if (err) return reject(new Error(stderr || err.message));
-        resolve(stdout.trim());
-      }
-    );
-  });
+  return guard.execPromise(command).then(s => (s || '').trim());
 }
 
 function runShellSync(command) {
@@ -956,21 +940,21 @@ function selfElevate() {
   const appPath = app.getPath('exe');
 
   if (platform === 'win32') {
-    exec(`powershell -Command "Start-Process '${appPath}' -Verb RunAs"`, () => {
+    guard.exec(`powershell -Command "Start-Process '${appPath}' -Verb RunAs"`, () => {
       app.isQuitting = true;
       app.quit();
     });
   } else if (platform === 'darwin') {
     const escapedPath = appPath.replace(/'/g, "'\\''");
-    exec(`osascript -e 'do shell script "open \\"${escapedPath.replace(/"/g, '\\\\\\"')}\\"" with administrator privileges'`, () => {
+    guard.exec(`osascript -e 'do shell script "open \\"${escapedPath.replace(/"/g, '\\\\\\"')}\\"" with administrator privileges'`, () => {
       app.isQuitting = true;
       app.quit();
     });
   } else {
     // Linux: use pkexec if available
-    exec(`which pkexec`, (err) => {
+    guard.exec(`which pkexec`, (err) => {
       const elevateCmd = err ? `sudo '${sanitizeShellArg(appPath)}'` : `pkexec '${sanitizeShellArg(appPath)}'`;
-      exec(elevateCmd, () => {
+      guard.exec(elevateCmd, () => {
         app.isQuitting = true;
         app.quit();
       });
@@ -1050,6 +1034,7 @@ if (!gotLock) {
   });
 
   app.whenReady().then(() => {
+    guard.init(app);
     isAdmin = checkAdmin();
     registerIPC();
     createWindow();
